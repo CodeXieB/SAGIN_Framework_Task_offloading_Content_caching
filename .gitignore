@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.idea/
+
+# Training artifacts
+*.pt
+*.pth
+*.npy
+*.npz
+*.png
+*.csv
+*training_report.json
+*.log
