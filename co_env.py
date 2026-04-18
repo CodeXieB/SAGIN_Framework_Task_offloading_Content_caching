@@ -57,9 +57,33 @@ class JointCacheOffloadEnv:
         max_active_iot: int = 10,
         ofdm_slots: int = 6,
         steps_per_episode: int = 50,
+        reward_mode: str = "baseline",
+        alpha1: float = 1.0,
+        alpha2: float = 0.3,
+        alpha3: float = 0.1,
+        beta1: float = 1.0,
+        beta2: float = 1.0,
+        beta3: float = 1.0,
+        lambda0: float = 0.2,
+        k: float = 1.0,
+        eta: float = 1.5,
+        gamma: float = 0.25,
+        cmax: float = 0.35,
     ):
         self.grid = grid
         self.steps_per_episode = steps_per_episode
+        self.reward_mode = reward_mode.lower()
+        self.alpha1 = alpha1
+        self.alpha2 = alpha2
+        self.alpha3 = alpha3
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.beta3 = beta3
+        self.lambda0 = lambda0
+        self.k = k
+        self.eta = eta
+        self.gamma = gamma
+        self.cmax = cmax
         with _mute():
             self.env = SAGINEnv(
                 X=grid[0], Y=grid[1], duration=duration,
@@ -359,7 +383,7 @@ class JointCacheOffloadEnv:
     # ------------------------------------------------------------------
     # Reward
     # ------------------------------------------------------------------
-    def _compute_reward(self) -> Tuple[float, dict]:
+    def _collect_reward_terms(self) -> dict:
         completed = 0
         new_hits = 0
         for c in self.coords:
@@ -387,21 +411,84 @@ class JointCacheOffloadEnv:
             for u in self.env.uavs.values()
         ])
 
-        reward = (
-            1.0 * completed
-            + 0.3 * new_hits
-            - 0.1 * max(dropped, 0)
-            - 0.05 * energy_ratio
-            - 0.05 * queue_ratio
-        )
-        reward /= max(self.num_uavs, 1)  # normalize
-
-        info = {
+        scale = float(max(self.num_uavs, 1))
+        return {
             "completed": completed,
             "new_cache_hits": new_hits,
             "dropped": dropped,
             "failed_offloads": failed,
             "energy_ratio": energy_ratio,
             "queue_ratio": queue_ratio,
+            "C_t": completed / scale,
+            "H_t": new_hits / scale,
+            "D_t": dropped / scale,
+            "E_t": float(energy_ratio),
+            "Q_t": float(queue_ratio),
+            "F_t": failed / scale,
         }
+
+    def _compute_perf_reward(self, terms: dict) -> float:
+        return (
+            self.alpha1 * terms["C_t"]
+            + self.alpha2 * terms["H_t"]
+            - self.alpha3 * terms["D_t"]
+        )
+
+    def _compute_safe_cost(self, terms: dict) -> float:
+        return (
+            self.beta1 * terms["E_t"]
+            + self.beta2 * terms["Q_t"]
+            + self.beta3 * terms["F_t"]
+        )
+
+    def _compute_baseline_reward(self, terms: dict) -> float:
+        reward = (
+            1.0 * terms["completed"]
+            + 0.3 * terms["new_cache_hits"]
+            - 0.1 * max(terms["dropped"], 0)
+            - 0.05 * terms["energy_ratio"]
+            - 0.05 * terms["queue_ratio"]
+        )
+        return reward / max(self.num_uavs, 1)
+
+    def _compute_safe_reward_a(self, r_perf: float, c_safe: float) -> Tuple[float, float, bool]:
+        lambda_t = self.lambda0 + self.k * max(0.0, c_safe - self.cmax)
+        violated = c_safe > self.cmax
+        if violated:
+            reward = -self.eta * c_safe
+        else:
+            reward = r_perf - lambda_t * c_safe
+        return reward, lambda_t, violated
+
+    def _compute_safe_reward_b(self, r_perf: float, c_safe: float) -> Tuple[float, float, bool]:
+        lambda_t = self.lambda0 + self.k * max(0.0, c_safe - self.cmax)
+        violated = c_safe > self.cmax
+        if violated:
+            reward = self.gamma * r_perf - self.eta * (c_safe - self.cmax)
+        else:
+            reward = r_perf - lambda_t * c_safe
+        return reward, lambda_t, violated
+
+    def _compute_reward(self) -> Tuple[float, dict]:
+        terms = self._collect_reward_terms()
+        r_perf = self._compute_perf_reward(terms)
+        c_safe = self._compute_safe_cost(terms)
+
+        if self.reward_mode == "safe_a":
+            reward, lambda_t, violated = self._compute_safe_reward_a(r_perf, c_safe)
+        elif self.reward_mode == "safe_b":
+            reward, lambda_t, violated = self._compute_safe_reward_b(r_perf, c_safe)
+        else:
+            reward = self._compute_baseline_reward(terms)
+            lambda_t = self.lambda0 + self.k * max(0.0, c_safe - self.cmax)
+            violated = c_safe > self.cmax
+
+        info = dict(terms)
+        info.update({
+            "r_perf": r_perf,
+            "c_safe": c_safe,
+            "lambda_t": lambda_t,
+            "constraint_violated": int(violated),
+            "reward_mode": self.reward_mode,
+        })
         return reward, info
