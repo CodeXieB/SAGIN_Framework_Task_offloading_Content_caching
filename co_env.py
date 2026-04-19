@@ -476,7 +476,7 @@ class JointCacheOffloadEnv:
 
         if self.reward_mode == "safe_a":
             reward, lambda_t, violated = self._compute_safe_reward_a(r_perf, c_safe)
-        elif self.reward_mode == "safe_b":
+        elif self.reward_mode in {"safe_b", "safe_c"}:
             reward, lambda_t, violated = self._compute_safe_reward_b(r_perf, c_safe)
         else:
             reward = self._compute_baseline_reward(terms)

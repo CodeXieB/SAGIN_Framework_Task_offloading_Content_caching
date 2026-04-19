@@ -34,7 +34,11 @@ def log(*args, **kw):
     print(*args, **kw, flush=True)
 
 
-def build_parser(description: str, default_artifact_dir: str) -> argparse.ArgumentParser:
+def build_parser(
+    description: str,
+    default_artifact_dir: str,
+    default_overrides: Dict[str, float] | None = None,
+) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=description)
     p.add_argument("--episodes", type=int, default=500)
     p.add_argument("--steps", type=int, default=50, help="steps per episode")
@@ -75,6 +79,8 @@ def build_parser(description: str, default_artifact_dir: str) -> argparse.Argume
     p.add_argument("--eta", type=float, default=1.5)
     p.add_argument("--gamma", type=float, default=0.25)
     p.add_argument("--cmax", type=float, default=1.8)
+    if default_overrides:
+        p.set_defaults(**default_overrides)
     return p
 
 
@@ -385,8 +391,13 @@ def evaluate_experiment(args: argparse.Namespace, reward_mode: str, experiment_n
     log(f"Cache   dist: {dict(zip(CACHE_NAMES, (cache_counts / cache_counts.sum()).round(3)))}")
 
 
-def main_for_experiment(default_reward_mode: str, experiment_name: str, default_artifact_dir: str) -> None:
-    parser = build_parser(experiment_name, default_artifact_dir)
+def main_for_experiment(
+    default_reward_mode: str,
+    experiment_name: str,
+    default_artifact_dir: str,
+    default_overrides: Dict[str, float] | None = None,
+) -> None:
+    parser = build_parser(experiment_name, default_artifact_dir, default_overrides=default_overrides)
     args = normalize_args(parser.parse_args())
     if args.eval:
         evaluate_experiment(args, default_reward_mode, experiment_name)
