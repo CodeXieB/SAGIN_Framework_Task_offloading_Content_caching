@@ -55,6 +55,16 @@ def build_parser(
     p.add_argument("--plot-log", action="store_true")
     p.add_argument("--log-every", type=int, default=10, metavar="N")
     p.add_argument("--smooth-window", type=int, default=20, metavar="N")
+    p.add_argument(
+        "--fixed-cache-action",
+        type=int,
+        default=-1,
+        choices=[-1, 0, 1, 2, 3],
+        help=(
+            "Fix cache action for offloading-only ablations: -1 learns cache, "
+            "0=no-op, 1=most-useful, 2=smallest, 3=pop-density."
+        ),
+    )
 
     # Curriculum learning parameters. Disabled unless --curriculum is set.
     p.add_argument("--curriculum", action="store_true")
@@ -110,6 +120,10 @@ def normalize_args(args: argparse.Namespace) -> argparse.Namespace:
     if args.curriculum_max_level < 0:
         args.curriculum_max_level = None
     return args
+
+
+def _fixed_cache_action(args: argparse.Namespace) -> int | None:
+    return None if args.fixed_cache_action < 0 else int(args.fixed_cache_action)
 
 
 def _slugify_experiment_name(experiment_name: str) -> str:
@@ -294,6 +308,7 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
         curriculum.apply_to_args(args)
     env = _make_env(args, reward_mode)
     agent = _make_agent(args, env, training=True)
+    fixed_cache_action = _fixed_cache_action(args)
 
     start_ep = 0
     prev_metrics = None
@@ -345,6 +360,8 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
             f"Curriculum enabled | level={curriculum.level}:{lvl.name} | "
             f"window={curriculum.window} | params={lvl.env}"
         )
+    if fixed_cache_action is not None:
+        log(f"Fixed cache action enabled | cache={fixed_cache_action}:{CACHE_NAMES[fixed_cache_action]}")
     log("=" * 80)
 
     t0 = time.time()
@@ -368,7 +385,7 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
         }
 
         for _ in range(args.steps):
-            off_a, cache_a, lp, val = agent.act(obs)
+            off_a, cache_a, lp, val = agent.act(obs, fixed_cache_action=fixed_cache_action)
             next_obs, r, done, info = env.step(off_a, cache_a)
             agent.store(obs, off_a, cache_a, lp, val, r, done)
             obs = next_obs
@@ -379,8 +396,8 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
             if done:
                 break
 
-        _, _, _, last_val = agent.act(obs, deterministic=True)
-        stats = agent.update(last_value=last_val)
+        _, _, _, last_val = agent.act(obs, deterministic=True, fixed_cache_action=fixed_cache_action)
+        stats = agent.update(last_value=last_val, fixed_cache_action=fixed_cache_action)
 
         denom = float(max(step_count, 1))
         metrics["episode_rewards"].append(ep_reward)
@@ -469,6 +486,7 @@ def evaluate_experiment(args: argparse.Namespace, reward_mode: str, experiment_n
     paths = _artifact_paths(args.artifact_dir, experiment_name, args.resume)
     env = _make_env(args, reward_mode)
     agent = _make_agent(args, env, training=False)
+    fixed_cache_action = _fixed_cache_action(args)
 
     if not os.path.exists(paths["ckpt"]):
         log(f"No checkpoint found for {experiment_name}. Train first.")
@@ -493,7 +511,11 @@ def evaluate_experiment(args: argparse.Namespace, reward_mode: str, experiment_n
         ep_csafe = 0.0
         steps = 0
         for _ in range(args.steps):
-            off_a, cache_a, _, _ = agent.act(obs, deterministic=True)
+            off_a, cache_a, _, _ = agent.act(
+                obs,
+                deterministic=True,
+                fixed_cache_action=fixed_cache_action,
+            )
             obs, r, done, info = env.step(off_a, cache_a)
             ep_r += r
             ep_vio += float(info.get("constraint_violated", 0.0))

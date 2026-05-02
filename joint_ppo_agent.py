@@ -14,7 +14,7 @@ Architecture:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
@@ -100,7 +100,12 @@ class JointPPOAgent(nn.Module):
         return off_logits, cache_logits, value
 
     @torch.no_grad()
-    def act(self, obs: np.ndarray, deterministic: bool = False):
+    def act(
+        self,
+        obs: np.ndarray,
+        deterministic: bool = False,
+        fixed_cache_action: Optional[int] = None,
+    ):
         x = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         off_logits, cache_logits, value = self._forward(x)
         off_logits = off_logits.squeeze(0)
@@ -111,15 +116,24 @@ class JointPPOAgent(nn.Module):
 
         if deterministic:
             off_a = int(off_logits.argmax().item())
-            cache_a = int(cache_logits.argmax().item())
         else:
             off_a = int(off_dist.sample().item())
-            cache_a = int(cache_dist.sample().item())
 
-        logprob = (
-            off_dist.log_prob(torch.tensor(off_a, device=self.device))
-            + cache_dist.log_prob(torch.tensor(cache_a, device=self.device))
-        )
+        if fixed_cache_action is None:
+            if deterministic:
+                cache_a = int(cache_logits.argmax().item())
+            else:
+                cache_a = int(cache_dist.sample().item())
+            logprob = (
+                off_dist.log_prob(torch.tensor(off_a, device=self.device))
+                + cache_dist.log_prob(torch.tensor(cache_a, device=self.device))
+            )
+        else:
+            cache_a = int(fixed_cache_action)
+            # Fixed-cache experiments learn only the offloading policy. The
+            # cache action is an external heuristic, so it is excluded from PPO
+            # importance ratios.
+            logprob = off_dist.log_prob(torch.tensor(off_a, device=self.device))
         return off_a, cache_a, float(logprob.item()), float(value.item())
 
     def store(self, obs, off_a, cache_a, logprob, value, reward, done):
@@ -135,7 +149,13 @@ class JointPPOAgent(nn.Module):
             )
         )
 
-    def update(self, last_value: float = 0.0, epochs: int = 2, mini_batch: int = 64):
+    def update(
+        self,
+        last_value: float = 0.0,
+        epochs: int = 2,
+        mini_batch: int = 64,
+        fixed_cache_action: Optional[int] = None,
+    ):
         if len(self.rollout) == 0:
             return {}
 
@@ -207,7 +227,12 @@ class JointPPOAgent(nn.Module):
                 off_dist = torch.distributions.Categorical(logits=off_logits)
                 cache_dist = torch.distributions.Categorical(logits=cache_logits)
 
-                new_lp = off_dist.log_prob(mb_off) + cache_dist.log_prob(mb_cache)
+                if fixed_cache_action is None:
+                    new_lp = off_dist.log_prob(mb_off) + cache_dist.log_prob(mb_cache)
+                    entropy = (off_dist.entropy() + cache_dist.entropy()).mean()
+                else:
+                    new_lp = off_dist.log_prob(mb_off)
+                    entropy = off_dist.entropy().mean()
                 ratio = torch.exp(new_lp - mb_old_lp)
 
                 surr1 = ratio * mb_adv
@@ -215,8 +240,6 @@ class JointPPOAgent(nn.Module):
                 pg_loss = -torch.min(surr1, surr2).mean()
 
                 v_loss = F.mse_loss(vals, mb_ret)
-                entropy = (off_dist.entropy() + cache_dist.entropy()).mean()
-
                 loss = pg_loss + self.value_coef * v_loss - self.entropy_coef * entropy
 
                 self.optimizer.zero_grad()
