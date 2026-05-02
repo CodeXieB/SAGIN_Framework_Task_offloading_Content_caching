@@ -30,6 +30,7 @@ from joint_ppo_agent import JointPPOAgent  # noqa: E402
 
 OFFLOAD_NAMES = ["local", "neighbor", "satellite", "drop"]
 CACHE_NAMES = ["no-op", "most-useful", "smallest", "pop-density"]
+CURRICULUM_LEVEL_NAMES = ["Easy", "Medium", "Target", "Hard"]
 
 
 def log(*args, **kw):
@@ -233,7 +234,15 @@ def _plot_curriculum(metrics: Dict[str, List[float]], path: str, title: str) -> 
     fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
 
     axes[0].step(episodes, metrics["episode_curriculum_level"], where="post", color="seagreen")
-    axes[0].set_ylabel("Level")
+    level_values = np.asarray(metrics["episode_curriculum_level"], dtype=np.float64)
+    finite_levels = level_values[np.isfinite(level_values)]
+    max_level = int(np.nanmax(finite_levels)) if finite_levels.size else 0
+    max_level = min(max_level, len(CURRICULUM_LEVEL_NAMES) - 1)
+    ticks = np.arange(max_level + 1)
+    axes[0].set_yticks(ticks)
+    axes[0].set_yticklabels(CURRICULUM_LEVEL_NAMES[: max_level + 1])
+    axes[0].set_ylim(-0.2, max_level + 0.4)
+    axes[0].set_ylabel("Difficulty")
     axes[0].set_title(f"{title} - Curriculum Diagnostics")
 
     axes[1].plot(metrics["episode_v_loss"], color="steelblue", linewidth=1.2, label="value loss")

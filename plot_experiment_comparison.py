@@ -58,7 +58,9 @@ SCHEME_META = {
     "safe_b": ("Safe-B", "#2ca02c"),
     "safe_c": ("Safe-C", "#ff7f0e"),
     "curriculum_safe": ("Curriculum-Safe", "#9467bd"),
+    "curriculum_safe_l4": ("Curriculum-Safe-L4", "#17becf"),
 }
+CURRICULUM_LEVEL_NAMES = ["Easy", "Medium", "Target", "Hard"]
 
 METRIC_KEYS = [
     "episode_rewards",
@@ -372,8 +374,19 @@ def plot_curriculum_diagnostics(schemes: List[SchemeData], output_dir: Path) -> 
         if "episode_learning_progress" in scheme.metrics:
             axes[2].plot(scheme.metrics["episode_learning_progress"], color=scheme.color, label=scheme.label)
 
+    all_levels = np.concatenate([
+        np.asarray(s.metrics["episode_curriculum_level"], dtype=np.float64)
+        for s in curriculum_schemes
+    ])
+    finite_levels = all_levels[np.isfinite(all_levels)]
+    max_level = int(np.nanmax(finite_levels)) if finite_levels.size else 0
+    max_level = min(max_level, len(CURRICULUM_LEVEL_NAMES) - 1)
+    ticks = np.arange(max_level + 1)
+    axes[0].set_yticks(ticks)
+    axes[0].set_yticklabels(CURRICULUM_LEVEL_NAMES[: max_level + 1])
+    axes[0].set_ylim(-0.2, max_level + 0.4)
     axes[0].set_title("Curriculum Difficulty Level")
-    axes[0].set_ylabel("Level")
+    axes[0].set_ylabel("Difficulty")
     axes[1].set_title("Critic Value-Loss EMA")
     axes[1].set_ylabel("EMA")
     axes[2].set_title("Learning Progress")
