@@ -12,6 +12,11 @@ def main():
         default_reward_mode="safe_a",
         experiment_name="Safe PPO A",
         default_artifact_dir=os.path.join("artifacts", "safe_a"),
+        default_overrides={
+            "gamma": 0.6,
+            "eta": 0.8,
+            "cmax": 1.9,
+        },
     )
 
 
