@@ -1,5 +1,5 @@
 """
-Create comparison plots for Baseline / Safe-A / Safe-B / Safe-C experiments.
+Create comparison plots for Baseline / Safe-A / Safe-B / Safe-C / Curriculum experiments.
 
 Expected inputs:
     artifacts/<scheme>/metrics.npz
@@ -19,7 +19,7 @@ Outputs (default):
 Usage:
     python plot_experiment_comparison.py
     python plot_experiment_comparison.py --tail-n 50
-    python plot_experiment_comparison.py --schemes baseline safe_b safe_c
+    python plot_experiment_comparison.py --schemes baseline safe_b safe_c curriculum_safe
 """
 from __future__ import annotations
 
@@ -57,6 +57,7 @@ SCHEME_META = {
     "safe_a": ("Safe-A", "#d62728"),
     "safe_b": ("Safe-B", "#2ca02c"),
     "safe_c": ("Safe-C", "#ff7f0e"),
+    "curriculum_safe": ("Curriculum-Safe", "#9467bd"),
 }
 
 METRIC_KEYS = [
@@ -68,6 +69,10 @@ METRIC_KEYS = [
     "episode_avg_csafe",
     "episode_avg_rperf",
     "episode_avg_failed_offloads",
+    "episode_v_loss",
+    "episode_curriculum_level",
+    "episode_value_loss_ema",
+    "episode_learning_progress",
 ]
 
 
@@ -86,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--schemes",
         nargs="+",
-        default=["baseline", "safe_a", "safe_b", "safe_c"],
+        default=["baseline", "safe_a", "safe_b", "safe_c", "curriculum_safe"],
         help="schemes to include in plots",
     )
     parser.add_argument(
@@ -352,6 +357,36 @@ def plot_safe_ab_stability(schemes: List[SchemeData], output_dir: Path, tail_n: 
     plt.close(fig)
 
 
+def plot_curriculum_diagnostics(schemes: List[SchemeData], output_dir: Path) -> None:
+    curriculum_schemes = [s for s in schemes if "episode_curriculum_level" in s.metrics]
+    if not curriculum_schemes:
+        return
+
+    fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
+    for scheme in curriculum_schemes:
+        levels = scheme.metrics["episode_curriculum_level"]
+        episodes = np.arange(len(levels))
+        axes[0].step(episodes, levels, where="post", color=scheme.color, label=scheme.label)
+        if "episode_value_loss_ema" in scheme.metrics:
+            axes[1].plot(scheme.metrics["episode_value_loss_ema"], color=scheme.color, label=scheme.label)
+        if "episode_learning_progress" in scheme.metrics:
+            axes[2].plot(scheme.metrics["episode_learning_progress"], color=scheme.color, label=scheme.label)
+
+    axes[0].set_title("Curriculum Difficulty Level")
+    axes[0].set_ylabel("Level")
+    axes[1].set_title("Critic Value-Loss EMA")
+    axes[1].set_ylabel("EMA")
+    axes[2].set_title("Learning Progress")
+    axes[2].set_ylabel("Relative Change")
+    axes[2].set_xlabel("Episode")
+    for ax in axes:
+        ax.grid(True, alpha=0.25)
+        ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_dir / "curriculum_diagnostics.png", dpi=150)
+    plt.close(fig)
+
+
 def write_summary_csv(schemes: List[SchemeData], output_dir: Path, tail_n: int) -> None:
     rows = []
     metrics_to_export = [
@@ -363,11 +398,16 @@ def write_summary_csv(schemes: List[SchemeData], output_dir: Path, tail_n: int) 
         "episode_avg_csafe",
         "episode_avg_rperf",
         "episode_avg_failed_offloads",
+        "episode_v_loss",
+        "episode_curriculum_level",
+        "episode_learning_progress",
     ]
 
     for scheme in schemes:
         row = {"scheme": scheme.label, "episodes": len(scheme.metrics["episode_rewards"])}
         for metric in metrics_to_export:
+            if metric not in scheme.metrics:
+                continue
             mean, std = tail_stats(scheme.metrics[metric], tail_n)
             row[f"{metric}_tail_mean"] = mean
             row[f"{metric}_tail_std"] = std
@@ -421,6 +461,7 @@ def main() -> None:
     plot_safe_ab_zoom_curves(schemes, output_dir, args.smooth_window)
     plot_safe_ab_delta_bars(schemes, output_dir, args.tail_n)
     plot_safe_ab_stability(schemes, output_dir, args.tail_n)
+    plot_curriculum_diagnostics(schemes, output_dir)
     write_summary_csv(schemes, output_dir, args.tail_n)
 
     print(f"Saved comparison figures to: {output_dir}")

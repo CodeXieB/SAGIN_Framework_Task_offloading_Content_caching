@@ -1,5 +1,6 @@
 """
-Shared PPO training/evaluation utilities for baseline and safe-reward variants.
+Shared PPO training/evaluation utilities for baseline, safe-reward, and
+curriculum variants.
 """
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 import torch
@@ -24,6 +25,7 @@ except Exception:  # pragma: no cover - optional plotting dependency
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from co_env import JointCacheOffloadEnv  # noqa: E402
+from curriculum_scheduler import CurriculumScheduler  # noqa: E402
 from joint_ppo_agent import JointPPOAgent  # noqa: E402
 
 OFFLOAD_NAMES = ["local", "neighbor", "satellite", "drop"]
@@ -37,7 +39,7 @@ def log(*args, **kw):
 def build_parser(
     description: str,
     default_artifact_dir: str,
-    default_overrides: Dict[str, float] | None = None,
+    default_overrides: Dict[str, Any] | None = None,
 ) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=description)
     p.add_argument("--episodes", type=int, default=500)
@@ -52,6 +54,17 @@ def build_parser(
     p.add_argument("--plot-log", action="store_true")
     p.add_argument("--log-every", type=int, default=10, metavar="N")
     p.add_argument("--smooth-window", type=int, default=20, metavar="N")
+
+    # Curriculum learning parameters. Disabled unless --curriculum is set.
+    p.add_argument("--curriculum", action="store_true")
+    p.add_argument("--curriculum-window", type=int, default=20, metavar="N")
+    p.add_argument("--curriculum-rho", type=float, default=0.8)
+    p.add_argument("--curriculum-lp-eps", type=float, default=0.15)
+    p.add_argument("--curriculum-safe-eps", type=float, default=0.85)
+    p.add_argument("--curriculum-drop-patience", type=int, default=2)
+    p.add_argument("--curriculum-drop-tol", type=float, default=2.0)
+    p.add_argument("--curriculum-start-level", type=int, default=0)
+    p.add_argument("--curriculum-max-level", type=int, default=-1)
 
     # Environment parameters kept explicit so later experiments can reuse the same core.
     p.add_argument("--grid-x", type=int, default=3)
@@ -91,6 +104,10 @@ def normalize_args(args: argparse.Namespace) -> argparse.Namespace:
         args.log_every = 1
     if args.smooth_window < 1:
         args.smooth_window = 1
+    if args.curriculum_window < 1:
+        args.curriculum_window = 1
+    if args.curriculum_max_level < 0:
+        args.curriculum_max_level = None
     return args
 
 
@@ -123,6 +140,7 @@ def _artifact_paths(artifact_dir: str, experiment_name: str, resume: bool) -> Di
         "rewards": os.path.join(artifact_dir, "rewards.npy"),
         "metrics": os.path.join(artifact_dir, "metrics.npz"),
         "plot": _resolve_plot_path(artifact_dir, experiment_name, resume),
+        "curriculum_plot": os.path.join(artifact_dir, "curriculum_diagnostics.png"),
     }
 
 
@@ -205,6 +223,36 @@ def _plot_curve(all_rewards: List[float], path: str, title: str, global_ep: int 
         log(f"Plot saved: {path}")
 
 
+def _plot_curriculum(metrics: Dict[str, List[float]], path: str, title: str) -> None:
+    if plt is None:
+        return
+    if not metrics.get("episode_curriculum_level"):
+        return
+
+    episodes = np.arange(1, len(metrics["episode_curriculum_level"]) + 1)
+    fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
+
+    axes[0].step(episodes, metrics["episode_curriculum_level"], where="post", color="seagreen")
+    axes[0].set_ylabel("Level")
+    axes[0].set_title(f"{title} - Curriculum Diagnostics")
+
+    axes[1].plot(metrics["episode_v_loss"], color="steelblue", linewidth=1.2, label="value loss")
+    if metrics.get("episode_value_loss_ema"):
+        axes[1].plot(metrics["episode_value_loss_ema"], color="darkorange", linewidth=1.8, label="EMA")
+    axes[1].set_ylabel("Value Loss")
+    axes[1].legend()
+
+    axes[2].plot(metrics["episode_learning_progress"], color="purple", linewidth=1.2)
+    axes[2].set_ylabel("Learning Progress")
+    axes[2].set_xlabel("Episode")
+
+    for ax in axes:
+        ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+
+
 def _save(agent: JointPPOAgent, episode: int, metrics: Dict[str, List[float]], paths: Dict[str, str]) -> None:
     torch.save({
         "model": agent.state_dict(),
@@ -215,8 +263,26 @@ def _save(agent: JointPPOAgent, episode: int, metrics: Dict[str, List[float]], p
     np.savez(paths["metrics"], **{k: np.asarray(v) for k, v in metrics.items()})
 
 
+def _make_curriculum_scheduler(args: argparse.Namespace) -> CurriculumScheduler | None:
+    if not args.curriculum:
+        return None
+    return CurriculumScheduler(
+        start_level=args.curriculum_start_level,
+        max_level=args.curriculum_max_level,
+        window=args.curriculum_window,
+        rho=args.curriculum_rho,
+        lp_epsilon=args.curriculum_lp_eps,
+        safe_epsilon=args.curriculum_safe_eps,
+        drop_patience=args.curriculum_drop_patience,
+        drop_tolerance=args.curriculum_drop_tol,
+    )
+
+
 def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name: str) -> None:
     paths = _artifact_paths(args.artifact_dir, experiment_name, args.resume)
+    curriculum = _make_curriculum_scheduler(args)
+    if curriculum is not None:
+        curriculum.apply_to_args(args)
     env = _make_env(args, reward_mode)
     agent = _make_agent(args, env, training=True)
 
@@ -233,6 +299,12 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
         "episode_avg_energy_ratio": [],
         "episode_avg_queue_ratio": [],
         "episode_avg_failed_offloads": [],
+        "episode_pg_loss": [],
+        "episode_v_loss": [],
+        "episode_entropy": [],
+        "episode_curriculum_level": [],
+        "episode_value_loss_ema": [],
+        "episode_learning_progress": [],
     }
 
     if args.resume and os.path.exists(paths["ckpt"]):
@@ -245,12 +317,25 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
             for k in metrics:
                 if k in prev_metrics:
                     metrics[k] = prev_metrics[k].tolist()
+                else:
+                    fill_value = 0.0 if k == "episode_curriculum_level" else np.nan
+                    metrics[k] = [fill_value] * start_ep
+        if curriculum is not None:
+            curriculum.restore(metrics)
+            curriculum.apply_to_args(args)
+            env = _make_env(args, reward_mode)
         log(f"Resumed {experiment_name} from episode {start_ep}")
 
     log(
         f"{experiment_name} | reward={reward_mode} | episodes {start_ep + 1}~{start_ep + args.episodes} | "
         f"obs_dim={env.obs_dim} | hidden={args.hidden} | lr={args.lr}"
     )
+    if curriculum is not None:
+        lvl = curriculum.current_level
+        log(
+            f"Curriculum enabled | level={curriculum.level}:{lvl.name} | "
+            f"window={curriculum.window} | params={lvl.env}"
+        )
     log("=" * 80)
 
     t0 = time.time()
@@ -299,14 +384,39 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
         metrics["episode_avg_energy_ratio"].append(ep_sums["energy_ratio"] / denom)
         metrics["episode_avg_queue_ratio"].append(ep_sums["queue_ratio"] / denom)
         metrics["episode_avg_failed_offloads"].append(ep_sums["failed_offloads"] / denom)
+        metrics["episode_pg_loss"].append(float(stats.get("pg_loss", np.nan)))
+        metrics["episode_v_loss"].append(float(stats.get("v_loss", np.nan)))
+        metrics["episode_entropy"].append(float(stats.get("entropy", np.nan)))
+
+        if curriculum is None:
+            metrics["episode_curriculum_level"].append(0.0)
+            metrics["episode_value_loss_ema"].append(float(stats.get("v_loss", np.nan)))
+            metrics["episode_learning_progress"].append(0.0)
+        else:
+            decision = curriculum.update(metrics, args.steps)
+            if decision is not None and decision.changed:
+                old = curriculum.levels[decision.old_level].name
+                new = curriculum.levels[decision.new_level].name
+                log(
+                    f"Curriculum {decision.reason}: {decision.old_level}:{old} -> {decision.new_level}:{new} | "
+                    f"Rwin={decision.window_reward:.2f} lp={decision.learning_progress:.3f} "
+                    f"vema={decision.value_loss_ema:.3f} safe={decision.safe_violation_rate:.3f}"
+                )
+                curriculum.apply_to_args(args)
+                env = _make_env(args, reward_mode)
+            metrics["episode_curriculum_level"].append(float(curriculum.level))
+            value_loss_ema = curriculum.value_loss_ema if curriculum.value_loss_ema is not None else np.nan
+            metrics["episode_value_loss_ema"].append(float(value_loss_ema))
+            metrics["episode_learning_progress"].append(float(curriculum.learning_progress))
 
         if global_ep % args.log_every == 0:
+            cur = f" | lvl={int(metrics['episode_curriculum_level'][-1])}" if curriculum is not None else ""
             log(
                 f"Ep {global_ep:4d} | R: {ep_reward:7.2f} | comp: {ep_sums['completed']:5.0f} | "
                 f"hits: {ep_sums['new_cache_hits']:5.0f} | drop: {ep_sums['dropped']:5.0f} | "
                 f"vio: {ep_sums['constraint_violated']:4.0f} | csafe: {ep_sums['c_safe'] / denom:.3f} | "
                 f"pg={stats.get('pg_loss', 0):.3f} v={stats.get('v_loss', 0):.3f} "
-                f"ent={stats.get('entropy', 0):.3f} | {time.time() - t0:.0f}s"
+                f"ent={stats.get('entropy', 0):.3f}{cur} | {time.time() - t0:.0f}s"
             )
 
         if global_ep % args.plot_every == 0:
@@ -319,6 +429,8 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
                 quiet=not args.plot_log,
                 smooth_window=args.smooth_window,
             )
+            if curriculum is not None:
+                _plot_curriculum(metrics, paths["curriculum_plot"], experiment_name)
 
         if global_ep % 50 == 0:
             _save(agent, global_ep, metrics, paths)
@@ -333,6 +445,8 @@ def train_experiment(args: argparse.Namespace, reward_mode: str, experiment_name
         quiet=False,
         smooth_window=args.smooth_window,
     )
+    if curriculum is not None:
+        _plot_curriculum(metrics, paths["curriculum_plot"], experiment_name)
 
     arr = np.asarray(metrics["episode_rewards"], dtype=np.float64)
     log(f"\nDone: {len(arr)} episodes in {time.time() - t0:.0f}s")
@@ -395,7 +509,7 @@ def main_for_experiment(
     default_reward_mode: str,
     experiment_name: str,
     default_artifact_dir: str,
-    default_overrides: Dict[str, float] | None = None,
+    default_overrides: Dict[str, Any] | None = None,
 ) -> None:
     parser = build_parser(experiment_name, default_artifact_dir, default_overrides=default_overrides)
     args = normalize_args(parser.parse_args())
