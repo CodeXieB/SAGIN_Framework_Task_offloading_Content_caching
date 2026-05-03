@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#222}.grid{stroke:#ddd;stroke-width:1}.axis{stroke:#222;stroke-width:1.2}</style>
+<text x="490" y="30" text-anchor="middle" font-size="18">Comprehensive Performance Comparison</text>
+<line class="grid" x1="80" y1="455.0" x2="945" y2="455.0"/>
+<text x="72" y="459.0" text-anchor="end" font-size="11">0.0</text>
+<line class="grid" x1="80" y1="355.8" x2="945" y2="355.8"/>
+<text x="72" y="359.8" text-anchor="end" font-size="11">169.7</text>
+<line class="grid" x1="80" y1="256.5" x2="945" y2="256.5"/>
+<text x="72" y="260.5" text-anchor="end" font-size="11">339.5</text>
+<line class="grid" x1="80" y1="157.2" x2="945" y2="157.2"/>
+<text x="72" y="161.2" text-anchor="end" font-size="11">509.2</text>
+<line class="grid" x1="80" y1="58.0" x2="945" y2="58.0"/>
+<text x="72" y="62.0" text-anchor="end" font-size="11">678.9</text>
+<line class="axis" x1="80" y1="455" x2="945" y2="455"/>
+<line class="axis" x1="80" y1="58" x2="80" y2="455"/>
+<rect x="154.2" y="109.8" width="64.0" height="345.2" fill="#1f77b4" opacity="0.88"/>
+<text x="186.2" y="104.8" text-anchor="middle" font-size="10">590</text>
+<rect x="224.2" y="151.9" width="64.0" height="303.1" fill="#ff7f0e" opacity="0.88"/>
+<text x="256.2" y="146.9" text-anchor="middle" font-size="10">518</text>
+<rect x="294.2" y="142.4" width="64.0" height="312.6" fill="#9467bd" opacity="0.88"/>
+<text x="326.2" y="137.4" text-anchor="middle" font-size="10">535</text>
+<text x="224.2" y="481" text-anchor="middle" font-size="12">Completed Tasks</text>
+<rect x="442.5" y="118.9" width="64.0" height="336.1" fill="#1f77b4" opacity="0.88"/>
+<text x="474.5" y="113.9" text-anchor="middle" font-size="10">575</text>
+<rect x="512.5" y="171.3" width="64.0" height="283.7" fill="#ff7f0e" opacity="0.88"/>
+<text x="544.5" y="166.3" text-anchor="middle" font-size="10">485</text>
+<rect x="582.5" y="160.3" width="64.0" height="294.7" fill="#9467bd" opacity="0.88"/>
+<text x="614.5" y="155.3" text-anchor="middle" font-size="10">504</text>
+<text x="512.5" y="481" text-anchor="middle" font-size="12">Cache Hits</text>
+<rect x="730.8" y="454.2" width="64.0" height="0.8" fill="#1f77b4" opacity="0.88"/>
+<text x="762.8" y="449.2" text-anchor="middle" font-size="10">1.33</text>
+<rect x="800.8" y="454.2" width="64.0" height="0.8" fill="#ff7f0e" opacity="0.88"/>
+<text x="832.8" y="449.2" text-anchor="middle" font-size="10">1.30</text>
+<rect x="870.8" y="454.2" width="64.0" height="0.8" fill="#9467bd" opacity="0.88"/>
+<text x="902.8" y="449.2" text-anchor="middle" font-size="10">1.35</text>
+<text x="800.8" y="481" text-anchor="middle" font-size="12">Average Performance Reward</text>
+<rect x="200" y="512" width="14" height="14" fill="#1f77b4"/>
+<text x="220" y="524" font-size="12">Baseline-800</text>
+<rect x="430" y="512" width="14" height="14" fill="#ff7f0e"/>
+<text x="450" y="524" font-size="12">Safe-C-800</text>
+<rect x="660" y="512" width="14" height="14" fill="#9467bd"/>
+<text x="680" y="524" font-size="12">Curriculum-Safe-800</text>
+</svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="580" viewBox="0 0 920 580">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#222}.grid{stroke:#ddd;stroke-width:1}.axis{stroke:#222;stroke-width:1.3}</style>
+<text x="460" y="30" text-anchor="middle" font-size="18">Safety-Performance Tradeoff</text>
+<line class="grid" x1="95.0" y1="60" x2="95.0" y2="495"/>
+<text x="95.0" y="519" text-anchor="middle" font-size="11">6.9</text>
+<line class="grid" x1="292.5" y1="60" x2="292.5" y2="495"/>
+<text x="292.5" y="519" text-anchor="middle" font-size="11">18.9</text>
+<line class="grid" x1="490.0" y1="60" x2="490.0" y2="495"/>
+<text x="490.0" y="519" text-anchor="middle" font-size="11">30.9</text>
+<line class="grid" x1="687.5" y1="60" x2="687.5" y2="495"/>
+<text x="687.5" y="519" text-anchor="middle" font-size="11">42.9</text>
+<line class="grid" x1="885.0" y1="60" x2="885.0" y2="495"/>
+<text x="885.0" y="519" text-anchor="middle" font-size="11">54.9</text>
+<line class="grid" x1="95" y1="495.0" x2="885" y2="495.0"/>
+<text x="87" y="499.0" text-anchor="end" font-size="11">-79.4</text>
+<line class="grid" x1="95" y1="386.2" x2="885" y2="386.2"/>
+<text x="87" y="390.2" text-anchor="end" font-size="11">102.7</text>
+<line class="grid" x1="95" y1="277.5" x2="885" y2="277.5"/>
+<text x="87" y="281.5" text-anchor="end" font-size="11">284.7</text>
+<line class="grid" x1="95" y1="168.8" x2="885" y2="168.8"/>
+<text x="87" y="172.8" text-anchor="end" font-size="11">466.7</text>
+<line class="grid" x1="95" y1="60.0" x2="885" y2="60.0"/>
+<text x="87" y="64.0" text-anchor="end" font-size="11">648.8</text>
+<line class="axis" x1="95" y1="495" x2="885" y2="495"/>
+<line class="axis" x1="95" y1="60" x2="95" y2="495"/>
+<text x="490.0" y="554" text-anchor="middle" font-size="13">Violation Steps (lower is better)</text>
+<text x="22" y="277.5" transform="rotate(-90 22 277.5)" text-anchor="middle" font-size="13">Completed Tasks (higher is better)</text>
+<text x="107" y="78" font-size="12" fill="#2ca02c">better</text>
+<circle cx="798.6" cy="107.6" r="10" fill="#1f77b4" stroke="#111"/>
+<text x="798.6" y="111.6" text-anchor="middle" font-size="10" font-weight="700" fill="white">B</text>
+<text x="810.6" y="115.6" text-anchor="start" font-size="12" font-weight="600">Baseline PPO</text>
+<circle cx="181.4" cy="447.4" r="10" fill="#d62728" stroke="#111"/>
+<text x="181.4" y="451.4" text-anchor="middle" font-size="10" font-weight="700" fill="white">A</text>
+<line x1="181.4" y1="447.4" x2="129.4" y2="425.4" stroke="#d62728" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="129.4" y="425.4" text-anchor="end" font-size="12" font-weight="600">Safe-A Hard</text>
+<circle cx="272.9" cy="400.6" r="10" fill="#2ca02c" stroke="#111"/>
+<text x="272.9" y="404.6" text-anchor="middle" font-size="10" font-weight="700" fill="white">B</text>
+<line x1="272.9" y1="400.6" x2="300.9" y2="430.6" stroke="#2ca02c" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="300.9" y="430.6" text-anchor="start" font-size="12" font-weight="600">Safe-B Soft</text>
+<circle cx="658.0" cy="162.6" r="10" fill="#ff7f0e" stroke="#111"/>
+<text x="658.0" y="166.6" text-anchor="middle" font-size="10" font-weight="700" fill="white">C</text>
+<text x="670.0" y="144.6" text-anchor="start" font-size="12" font-weight="600">Safe-C Balanced</text>
+</svg>

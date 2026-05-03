@@ -39,6 +39,12 @@ SCHEMES: List[Tuple[str, str, str]] = [
     ("curriculum_safe_target_final", "Curriculum-Safe-800", "#9467bd"),
 ]
 
+COMPREHENSIVE_SCHEMES: List[Tuple[str, str, str]] = [
+    ("baseline_800", "Baseline-800", "#1f77b4"),
+    ("safe_c_800", "Safe-C-800", "#ff7f0e"),
+    ("curriculum_safe_target_final", "Curriculum-Safe-800", "#9467bd"),
+]
+
 METRICS: List[Tuple[str, str, str]] = [
     ("episode_rewards", "Reward", "higher"),
     ("episode_completed", "Completed Tasks", "higher"),
@@ -103,6 +109,42 @@ def load_all(artifact_root: Path, tail_n: int) -> Tuple[List[Dict[str, float | s
     return rows, all_metrics
 
 
+def available_comprehensive_schemes(artifact_root: Path) -> List[Tuple[str, str, str]]:
+    if (artifact_root / "baseline_800" / "metrics.npz").exists():
+        return COMPREHENSIVE_SCHEMES
+    return [
+        ("baseline", "Baseline-500", "#1f77b4"),
+        ("safe_c_800", "Safe-C-800", "#ff7f0e"),
+        ("curriculum_safe_target_final", "Curriculum-Safe-800", "#9467bd"),
+    ]
+
+
+def load_rows_for_schemes(
+    artifact_root: Path,
+    schemes: List[Tuple[str, str, str]],
+    tail_n: int,
+) -> List[Dict[str, float | str]]:
+    rows: List[Dict[str, float | str]] = []
+    for scheme_key, scheme_label, _ in schemes:
+        metrics_path = artifact_root / scheme_key / "metrics.npz"
+        if not metrics_path.exists():
+            raise FileNotFoundError(f"Missing metrics file: {metrics_path}")
+        data = np.load(metrics_path, allow_pickle=False)
+        row: Dict[str, float | str] = {
+            "scheme": scheme_key,
+            "label": scheme_label,
+            "episodes": int(len(data["episode_rewards"])),
+        }
+        for metric_key, _, _ in METRICS:
+            if metric_key not in data:
+                raise KeyError(f"{metrics_path} is missing metric: {metric_key}")
+            mean, std = tail_stats(data[metric_key], tail_n)
+            row[f"{metric_key}_mean"] = mean
+            row[f"{metric_key}_std"] = std
+        rows.append(row)
+    return rows
+
+
 def write_summary(rows: List[Dict[str, float | str]], output_dir: Path, tail_n: int) -> Tuple[Path, Path]:
     csv_path = output_dir / "innovation2_final_summary.csv"
     fieldnames = ["scheme", "label", "episodes"]
@@ -140,6 +182,41 @@ def write_summary(rows: List[Dict[str, float | str]], output_dir: Path, tail_n: 
         for metric, name in display_metrics:
             delta = float(cur[f"{metric}_mean"]) - float(base[f"{metric}_mean"])
             f.write(f"| {name} | {delta:.2f} |\n")
+    return csv_path, md_path
+
+
+def write_comprehensive_summary(
+    rows: List[Dict[str, float | str]],
+    output_dir: Path,
+    tail_n: int,
+) -> Tuple[Path, Path]:
+    csv_path = output_dir / "innovation2_comprehensive_summary.csv"
+    fieldnames = ["scheme", "label", "episodes"]
+    for metric_key, _, _ in METRICS:
+        fieldnames.extend([f"{metric_key}_mean", f"{metric_key}_std"])
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    md_path = output_dir / "innovation2_comprehensive_summary.md"
+    display_metrics = [
+        ("episode_rewards", "Reward"),
+        ("episode_completed", "Completed"),
+        ("episode_hits", "Hits"),
+        ("episode_dropped", "Dropped"),
+        ("episode_violation_steps", "Violations"),
+        ("episode_avg_csafe", "Safety Cost"),
+        ("episode_avg_rperf", "r_perf"),
+    ]
+    with md_path.open("w", encoding="utf-8") as f:
+        f.write("# Innovation 2 Comprehensive Summary\n\n")
+        f.write(f"Tail window: last {tail_n} episodes.\n\n")
+        f.write("| Method | Episodes | " + " | ".join(name for _, name in display_metrics) + " |\n")
+        f.write("|---|---:|" + "|".join("---:" for _ in display_metrics) + "|\n")
+        for row in rows:
+            values = [f"{float(row[f'{metric}_mean']):.2f}" for metric, _ in display_metrics]
+            f.write(f"| {row['label']} | {row['episodes']} | " + " | ".join(values) + " |\n")
     return csv_path, md_path
 
 
@@ -202,15 +279,17 @@ def save_grouped_bar_png(
     metric_keys: List[str],
     output_path: Path,
     title: str,
+    schemes: List[Tuple[str, str, str]] = SCHEMES,
 ) -> Path:
     labels_by_metric = {key: label for key, label, _ in METRICS}
     x = np.arange(len(metric_keys))
     width = 0.34
     fig, ax = plt.subplots(figsize=(8.8, 5.0))
-    for i, (scheme_key, label, color) in enumerate(SCHEMES):
+    for i, (scheme_key, label, color) in enumerate(schemes):
         row = next(row for row in rows if row["scheme"] == scheme_key)
         values = [float(row[f"{metric}_mean"]) for metric in metric_keys]
-        bars = ax.bar(x + (i - 0.5) * width, values, width, label=label, color=color, alpha=0.88)
+        offset = i - (len(schemes) - 1) / 2.0
+        bars = ax.bar(x + offset * width, values, width, label=label, color=color, alpha=0.88)
         ax.bar_label(bars, labels=[f"{v:.2f}" if abs(v) < 10 else f"{v:.0f}" for v in values], padding=3, fontsize=8)
     if len(rows) == 2:
         base = rows[0]
@@ -375,6 +454,16 @@ def save_reward_curves_svg(all_metrics: Dict[str, Dict[str, np.ndarray]], output
 
 
 def save_grouped_bar_svg(rows: List[Dict[str, float | str]], metric_keys: List[str], output_path: Path, title: str) -> Path:
+    return save_grouped_bar_svg_for_schemes(rows, metric_keys, output_path, title, SCHEMES)
+
+
+def save_grouped_bar_svg_for_schemes(
+    rows: List[Dict[str, float | str]],
+    metric_keys: List[str],
+    output_path: Path,
+    title: str,
+    schemes: List[Tuple[str, str, str]],
+) -> Path:
     width, height = 980, 560
     left, right, top, bottom = 80, 35, 58, 105
     plot_w, plot_h = width - left - right, height - top - bottom
@@ -399,9 +488,9 @@ def save_grouped_bar_svg(rows: List[Dict[str, float | str]], metric_keys: List[s
     for mi, metric in enumerate(metric_keys):
         center = left + group_w * (mi + 0.5)
         for ri, row in enumerate(rows):
-            _, _, color = next(item for item in SCHEMES if item[0] == row["scheme"])
+            _, _, color = next(item for item in schemes if item[0] == row["scheme"])
             value = float(row[f"{metric}_mean"])
-            x = center + (ri - 0.5) * bar_w
+            x = center + (ri - (len(rows) - 1) / 2.0) * bar_w
             y = sy(value)
             lines.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w - 6:.1f}" height="{top + plot_h - y:.1f}" fill="{color}" opacity="0.88"/>')
             label = f"{value:.2f}" if abs(value) < 10 else f"{value:.0f}"
@@ -415,11 +504,29 @@ def save_grouped_bar_svg(rows: List[Dict[str, float | str]], metric_keys: List[s
                 f'font-size="12" font-weight="600">{_svg_escape(dlabel)}</text>'
             )
         lines.append(f'<text x="{center:.1f}" y="{top + plot_h + 26}" text-anchor="middle" font-size="12">{_svg_escape(labels_by_metric[metric])}</text>')
-    for i, (_, label, color) in enumerate(SCHEMES):
-        x = left + 220 + i * 230
+    for i, (_, label, color) in enumerate(schemes):
+        x = left + 120 + i * 230
         lines.append(f'<rect x="{x}" y="{height - 48}" width="14" height="14" fill="{color}"/>')
         lines.append(f'<text x="{x + 20}" y="{height - 36}" font-size="12">{_svg_escape(label)}</text>')
     return _simple_svg_chart(output_path, title, lines)
+
+
+def save_comprehensive_plots(
+    rows: List[Dict[str, float | str]],
+    schemes: List[Tuple[str, str, str]],
+    output_dir: Path,
+) -> List[Path]:
+    performance = ["episode_completed", "episode_hits", "episode_avg_rperf"]
+    safety = ["episode_violation_steps", "episode_avg_csafe", "episode_avg_failed_offloads"]
+    if HAS_MPL:
+        return [
+            save_grouped_bar_png(rows, performance, output_dir / "innovation2_comprehensive_performance.png", "Comprehensive Performance Comparison", schemes=schemes),
+            save_grouped_bar_png(rows, safety, output_dir / "innovation2_comprehensive_safety.png", "Comprehensive Safety Comparison", schemes=schemes),
+        ]
+    return [
+        save_grouped_bar_svg_for_schemes(rows, performance, output_dir / "innovation2_comprehensive_performance.svg", "Comprehensive Performance Comparison", schemes),
+        save_grouped_bar_svg_for_schemes(rows, safety, output_dir / "innovation2_comprehensive_safety.svg", "Comprehensive Safety Comparison", schemes),
+    ]
 
 
 def save_delta_bar_svg(rows: List[Dict[str, float | str]], output_path: Path) -> Path:
@@ -545,9 +652,20 @@ def main() -> None:
     csv_path, md_path = write_summary(rows, output_dir, args.tail_n)
     figure_paths = save_plots(rows, all_metrics, output_dir, args.smooth_window)
 
+    comprehensive_schemes = available_comprehensive_schemes(artifact_root)
+    comprehensive_rows = load_rows_for_schemes(artifact_root, comprehensive_schemes, args.tail_n)
+    comp_csv_path, comp_md_path = write_comprehensive_summary(
+        comprehensive_rows,
+        output_dir,
+        args.tail_n,
+    )
+    figure_paths.extend(save_comprehensive_plots(comprehensive_rows, comprehensive_schemes, output_dir))
+
     print(f"Saved Innovation 2 final results to: {output_dir}")
     print(f"Summary CSV: {csv_path}")
     print(f"Summary Markdown: {md_path}")
+    print(f"Comprehensive CSV: {comp_csv_path}")
+    print(f"Comprehensive Markdown: {comp_md_path}")
     for path in figure_paths:
         print(f"Figure: {path}")
 
@@ -556,6 +674,16 @@ def main() -> None:
         print(
             f"  {row['label']:<22} "
             f"reward={float(row['episode_rewards_mean']):.2f}, "
+            f"completed={float(row['episode_completed_mean']):.2f}, "
+            f"hits={float(row['episode_hits_mean']):.2f}, "
+            f"violations={float(row['episode_violation_steps_mean']):.2f}, "
+            f"csafe={float(row['episode_avg_csafe_mean']):.2f}"
+        )
+    print("\nComprehensive tail means:")
+    for row in comprehensive_rows:
+        print(
+            f"  {row['label']:<22} "
+            f"episodes={row['episodes']}, "
             f"completed={float(row['episode_completed_mean']):.2f}, "
             f"hits={float(row['episode_hits_mean']):.2f}, "
             f"violations={float(row['episode_violation_steps_mean']):.2f}, "

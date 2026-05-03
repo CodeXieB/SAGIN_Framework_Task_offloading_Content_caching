@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#222}.grid{stroke:#ddd;stroke-width:1}.axis{stroke:#222;stroke-width:1.2}</style>
+<text x="490" y="30" text-anchor="middle" font-size="18">Safety Metrics</text>
+<line class="grid" x1="80" y1="455.0" x2="945" y2="455.0"/>
+<text x="72" y="459.0" text-anchor="end" font-size="11">0.0</text>
+<line class="grid" x1="80" y1="355.8" x2="945" y2="355.8"/>
+<text x="72" y="359.8" text-anchor="end" font-size="11">12.7</text>
+<line class="grid" x1="80" y1="256.5" x2="945" y2="256.5"/>
+<text x="72" y="260.5" text-anchor="end" font-size="11">25.3</text>
+<line class="grid" x1="80" y1="157.2" x2="945" y2="157.2"/>
+<text x="72" y="161.2" text-anchor="end" font-size="11">38.0</text>
+<line class="grid" x1="80" y1="58.0" x2="945" y2="58.0"/>
+<text x="72" y="62.0" text-anchor="end" font-size="11">50.7</text>
+<line class="axis" x1="80" y1="455" x2="945" y2="455"/>
+<line class="axis" x1="80" y1="58" x2="80" y2="455"/>
+<rect x="189.2" y="111.3" width="64.0" height="343.7" fill="#ff7f0e" opacity="0.88"/>
+<text x="221.2" y="106.3" text-anchor="middle" font-size="10">44</text>
+<rect x="259.2" y="109.8" width="64.0" height="345.2" fill="#9467bd" opacity="0.88"/>
+<text x="291.2" y="104.8" text-anchor="middle" font-size="10">44</text>
+<text x="224.2" y="81.8" text-anchor="middle" font-size="12" font-weight="600">Δ +0.20</text>
+<text x="224.2" y="481" text-anchor="middle" font-size="12">Violation Steps</text>
+<rect x="477.5" y="433.2" width="64.0" height="21.8" fill="#ff7f0e" opacity="0.88"/>
+<text x="509.5" y="428.2" text-anchor="middle" font-size="10">2.79</text>
+<rect x="547.5" y="433.3" width="64.0" height="21.7" fill="#9467bd" opacity="0.88"/>
+<text x="579.5" y="428.3" text-anchor="middle" font-size="10">2.77</text>
+<text x="512.5" y="405.2" text-anchor="middle" font-size="12" font-weight="600">Δ -0.01</text>
+<text x="512.5" y="481" text-anchor="middle" font-size="12">Average Safety Cost</text>
+<rect x="765.8" y="211.4" width="64.0" height="243.6" fill="#ff7f0e" opacity="0.88"/>
+<text x="797.8" y="206.4" text-anchor="middle" font-size="10">31</text>
+<rect x="835.8" y="212.7" width="64.0" height="242.3" fill="#9467bd" opacity="0.88"/>
+<text x="867.8" y="207.7" text-anchor="middle" font-size="10">31</text>
+<text x="800.8" y="183.4" text-anchor="middle" font-size="12" font-weight="600">Δ -0.16</text>
+<text x="800.8" y="481" text-anchor="middle" font-size="12">Average Failed Offloads</text>
+<rect x="200" y="512" width="14" height="14" fill="#ff7f0e"/>
+<text x="220" y="524" font-size="12">Safe-C-800</text>
+<rect x="430" y="512" width="14" height="14" fill="#9467bd"/>
+<text x="450" y="524" font-size="12">Curriculum-Safe-800</text>
+</svg>

@@ -61,6 +61,7 @@ SCHEME_META = {
     "curriculum_safe_l4": ("Curriculum-Safe-L4", "#17becf"),
 }
 CURRICULUM_LEVEL_NAMES = ["Easy", "Medium", "Target", "Hard"]
+TARGET_LEVEL = 2
 
 METRIC_KEYS = [
     "episode_rewards",
@@ -367,15 +368,23 @@ def plot_curriculum_diagnostics(schemes: List[SchemeData], output_dir: Path) -> 
     fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
     for scheme in curriculum_schemes:
         levels = scheme.metrics["episode_curriculum_level"]
+        label = scheme.label
+        if "curriculum" not in scheme.key:
+            levels = np.full_like(levels, TARGET_LEVEL, dtype=np.float64)
+            label = f"{scheme.label} (Fixed Target)"
         episodes = np.arange(len(levels))
-        axes[0].step(episodes, levels, where="post", color=scheme.color, label=scheme.label)
+        axes[0].step(episodes, levels, where="post", color=scheme.color, label=label)
         if "episode_value_loss_ema" in scheme.metrics:
             axes[1].plot(scheme.metrics["episode_value_loss_ema"], color=scheme.color, label=scheme.label)
         if "episode_learning_progress" in scheme.metrics:
             axes[2].plot(scheme.metrics["episode_learning_progress"], color=scheme.color, label=scheme.label)
 
     all_levels = np.concatenate([
-        np.asarray(s.metrics["episode_curriculum_level"], dtype=np.float64)
+        (
+            np.full_like(s.metrics["episode_curriculum_level"], TARGET_LEVEL, dtype=np.float64)
+            if "curriculum" not in s.key
+            else np.asarray(s.metrics["episode_curriculum_level"], dtype=np.float64)
+        )
         for s in curriculum_schemes
     ])
     finite_levels = all_levels[np.isfinite(all_levels)]

@@ -2,17 +2,18 @@ __pycache__/
 *.pyc
 .idea/
 
-# Training artifacts
-*.pt
-*.pth
-*.npy
-*.npz
-*.png
-*.csv
-*training_report.json
-*.log
 
-*.docx
-*.svg
-*.pdf
-*.md
+# # Training artifacts
+# *.pt
+# *.pth
+# *.npy
+# *.npz
+# *.png
+# *.csv
+# *training_report.json
+# *.log
+
+# *.docx
+# *.svg
+# *.pdf
+# *.md
